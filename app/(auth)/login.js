@@ -1,136 +1,203 @@
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { supabase } from '../../lib/supabase';
-import { Theme } from '../../styles/theme';
+
+const loginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
+});
+
 export default function LoginScreen({ navigation }) {
-  // 1. Initialize React Hook Form
-  const { control, handleSubmit, formState: { isSubmitting } } = useForm({
-    defaultValues: {
-      email: '',
-      password: ''
-    }
+  const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState(''); // Holds the "Wrong Password" message
+
+  const { control, handleSubmit, formState: { errors } } = useForm({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: '', password: '' }
   });
 
   const onLogin = async (data) => {
-    // REQUIREMENT: Identifier (email) must be trimmed (no extra spaces)
-    // The 'data' object is now guaranteed to exist by react-hook-form
-    const cleanEmail = data.email?.trim() || '';
-    
+    setLoading(true);
+    setAuthError(''); // Clear previous errors
+
     const { error } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
+      email: data.email,
       password: data.password,
     });
 
     if (error) {
-      // REQUIREMENT: Generic error message to avoid leaking user info
-      Alert.alert("Authentication Failed", "Invalid credentials. Please try again.");
-      return;
-    }
-    const onLogin = async (data) => {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: data.email.trim(), // Ensure no trailing spaces
-        password: data.password,
-      });
-    
-      if (error) {
-        // Check the console to see the real reason (Invalid credentials, etc)
-        console.log("Auth Error Details:", error.status, error.message);
-        
-        // Requirement: Generic message for the user
-        Alert.alert("Login Failed", "The email or password you entered is incorrect.");
-        return;
+      setLoading(false);
+      // If Supabase returns invalid credentials, show user-friendly message
+      if (error.message.includes("Invalid login credentials")) {
+        setAuthError("Invalid email or password. Please try again.");
+      } else {
+        setAuthError(error.message);
       }
-      
-      // Success logic...
-    };
-    // Check for MFA/AAL level logic
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
-      navigation.navigate('MFA');
     }
+    // Note: Success is handled by the listener in App.js
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome Back</Text>
-      
-      {/* Email Field with Controller */}
-      <View style={styles.inputWrapper}>
-        <Text style={styles.label}>Email Address</Text>
-        <Controller
-          control={control}
-          name="email"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              style={styles.input}
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              placeholder="email@example.com"
-              placeholderTextColor="#64748b"
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
+      <View style={styles.card}>
+        <Text style={styles.title}>Welcome Back</Text>
+        <Text style={styles.subtitle}>Log in to your account</Text>
+
+        {/* 1. Error Indication Banner */}
+        {authError ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>{authError}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Email</Text>
+          <Controller
+            control={control}
+            name="email"
+            render={({ field: { onChange, value } }) => (
+              <TextInput
+                style={[styles.input, (errors.email || authError) && styles.inputError]}
+                placeholder="email@example.com"
+                placeholderTextColor="#64748b"
+                onChangeText={(text) => {
+                  onChange(text);
+                  setAuthError(''); // Clear error when typing
+                }}
+                value={value}
+                autoCapitalize="none"
+              />
+            )}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Password</Text>
+          <Controller
+            control={control}
+            name="password"
+            render={({ field: { onChange, value } }) => (
+              <TextInput
+                style={[styles.input, (errors.password || authError) && styles.inputError]}
+                placeholder="••••••••"
+                placeholderTextColor="#64748b"
+                secureTextEntry
+                onChangeText={(text) => {
+                  onChange(text);
+                  setAuthError(''); // Clear error when typing
+                }}
+                value={value}
+              />
+            )}
+          />
+        </View>
+
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={handleSubmit(onLogin)}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Login</Text>
           )}
-        />
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => navigation.navigate('Register')} style={styles.footerLink}>
+          <Text style={styles.footerText}>
+            Don't have an account? <Text style={styles.linkText}>Sign Up</Text>
+          </Text>
+        </TouchableOpacity>
       </View>
-
-      {/* Password Field with Controller */}
-      <View style={styles.inputWrapper}>
-        <Text style={styles.label}>Password</Text>
-        <Controller
-          control={control}
-          name="password"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              style={styles.input}
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              placeholder="••••••••"
-              placeholderTextColor="#64748b"
-              secureTextEntry
-            />
-          )}
-        />
-      </View>
-
-      <TouchableOpacity 
-        style={styles.button} 
-        onPress={handleSubmit(onLogin)}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Sign In</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-        <Text style={styles.linkText}>
-          New here? <Text style={{ color: '#6366f1', fontWeight: 'bold' }}>Create Account</Text>
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#0f172a', justifyContent: 'center' },
-  title: { fontSize: 32, fontWeight: 'bold', color: '#fff', marginBottom: 40 },
-  inputWrapper: { marginBottom: 20 },
-  label: { color: '#94a3b8', marginBottom: 8, fontSize: 14 },
-  input: { 
-    backgroundColor: 'rgba(255,255,255,0.05)', 
-    borderRadius: 12, 
-    padding: 16, 
-    color: '#fff', 
-    borderWidth: 1, 
-    borderColor: 'rgba(255,255,255,0.1)' 
+  container: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    padding: 20,
   },
-  button: { backgroundColor: '#6366f1', padding: 18, borderRadius: 12, marginTop: 10, height: 56, justifyContent: 'center' },
-  buttonText: { color: '#fff', textAlign: 'center', fontWeight: 'bold', fontSize: 16 },
-  linkText: { color: '#94a3b8', textAlign: 'center', marginTop: 24 }
+  card: {
+    backgroundColor: '#1e293b',
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    elevation: 10,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#f8fafc',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#94a3b8',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    marginBottom: 20,
+  },
+  errorBannerText: {
+    color: '#ef4444',
+    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  inputGroup: {
+    marginBottom: 15,
+  },
+  label: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    padding: 15,
+    color: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  inputError: {
+    borderColor: '#ef4444',
+  },
+  button: {
+    backgroundColor: '#6366f1',
+    padding: 18,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  footerLink: {
+    marginTop: 25,
+    alignItems: 'center',
+  },
+  footerText: {
+    color: '#94a3b8',
+  },
+  linkText: {
+    color: '#6366f1',
+    fontWeight: '700',
+  },
 });

@@ -4,13 +4,25 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '../../lib/supabase';
-import { Theme } from '../../styles/theme';
 
-// 1. Validation Schema
+// 1. Enhanced Validation Schema
 const signUpSchema = z.object({
-  username: z.string().min(3, 'Username must be at least 3 characters'),
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  username: z.string()
+    .min(3, 'Username must be at least 3 characters')
+    .max(20, 'Username cannot exceed 20 characters')
+    .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'),
+  
+  email: z.string()
+    .email('Invalid email address')
+    .trim()
+    .toLowerCase(), // Normalizes email to prevent duplicate accounts with different casing
+  
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password needs at least one uppercase letter')
+    .regex(/[0-9]/, 'Password needs at least one number')
+    .regex(/[^a-zA-Z0-9]/, 'Password needs at least one special character'),
+    
   confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -25,16 +37,15 @@ export default function RegisterScreen({ navigation }) {
     defaultValues: { username: '', email: '', password: '', confirmPassword: '' }
   });
 
-  // 2. The Register Logic (Includes Metadata for your SQL Trigger)
   const onRegister = async (data) => {
     setLoading(true);
     try {
-      const { data: authData, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
           data: {
-            username: data.username, // This triggers the handle_new_user() SQL function
+            username: data.username,
           }
         }
       });
@@ -43,7 +54,7 @@ export default function RegisterScreen({ navigation }) {
 
       Alert.alert(
         "Registration Successful",
-        "Please check your email to confirm your account before logging in.",
+        "Please check your email to confirm your account.",
         [{ text: "OK", onPress: () => navigation.navigate('Login') }]
       );
     } catch (error) {
@@ -53,7 +64,6 @@ export default function RegisterScreen({ navigation }) {
     }
   };
 
-  // Helper Input Component for clean code
   const InputField = ({ label, name, placeholder, secure = false }) => (
     <View style={styles.inputGroup}>
       <Text style={styles.label}>{label}</Text>
@@ -62,7 +72,6 @@ export default function RegisterScreen({ navigation }) {
         name={name}
         render={({ field: { onChange, value } }) => (
           <TextInput
-            nativeID={name}
             style={[styles.input, errors[name] && styles.inputError]}
             placeholder={placeholder}
             placeholderTextColor="#64748b"
@@ -83,9 +92,9 @@ export default function RegisterScreen({ navigation }) {
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>Join the innovative community</Text>
 
-        <InputField label="Username" name="username" placeholder="johndoe" />
+        <InputField label="Username" name="username" placeholder="johndoe_99" />
         <InputField label="Email" name="email" placeholder="email@example.com" />
-        <InputField label="Password" name="password" placeholder="••••••••" secure />
+        <InputField label="Password" name="password" placeholder="Min 8 chars, 1 upper, 1 symbol" secure />
         <InputField label="Confirm Password" name="confirmPassword" placeholder="••••••••" secure />
 
         <TouchableOpacity 
@@ -110,86 +119,21 @@ export default function RegisterScreen({ navigation }) {
   );
 }
 
+// ... styles remain the same ...
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: '#0f172a', // Dark theme background
-    justifyContent: 'center',
-    padding: 20,
-  },
-  card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#f8fafc',
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#94a3b8',
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    color: '#e2e8f0',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#0f172a',
-    borderRadius: 12,
-    padding: 15,
-    color: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  inputError: {
-    borderColor: '#ef4444',
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 12,
-    marginTop: 5,
-  },
-  button: {
-    backgroundColor: '#6366f1', // Indigo primary
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  buttonDisabled: {
-    backgroundColor: '#4338ca',
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  footerLink: {
-    marginTop: 25,
-    alignItems: 'center',
-  },
-  footerText: {
-    color: '#94a3b8',
-    fontSize: 14,
-  },
-  linkText: {
-    color: '#6366f1',
-    fontWeight: '700',
-  },
+  container: { flexGrow: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
+  card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, elevation: 10 },
+  title: { fontSize: 28, fontWeight: '800', color: '#f8fafc', textAlign: 'center' },
+  subtitle: { fontSize: 16, color: '#94a3b8', textAlign: 'center', marginBottom: 30 },
+  inputGroup: { marginBottom: 20 },
+  label: { color: '#e2e8f0', fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  input: { backgroundColor: '#0f172a', borderRadius: 12, padding: 15, color: '#f8fafc', borderWidth: 1, borderColor: '#334155' },
+  inputError: { borderColor: '#ef4444' },
+  errorText: { color: '#ef4444', fontSize: 12, marginTop: 5 },
+  button: { backgroundColor: '#6366f1', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  buttonDisabled: { backgroundColor: '#4338ca', opacity: 0.7 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  footerLink: { marginTop: 25, alignItems: 'center' },
+  footerText: { color: '#94a3b8', fontSize: 14 },
+  linkText: { color: '#6366f1', fontWeight: '700' },
 });

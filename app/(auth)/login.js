@@ -6,13 +6,13 @@ import * as z from 'zod';
 import { supabase } from '../../lib/supabase';
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z.string().email('Invalid email address').trim().toLowerCase(),
   password: z.string().min(1, 'Password is required'),
 });
 
 export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
-  const [authError, setAuthError] = useState(''); // Holds the "Wrong Password" message
+  const [authError, setAuthError] = useState('');
 
   const { control, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(loginSchema),
@@ -21,7 +21,7 @@ export default function LoginScreen({ navigation }) {
 
   const onLogin = async (data) => {
     setLoading(true);
-    setAuthError(''); // Clear previous errors
+    setAuthError('');
 
     const { error } = await supabase.auth.signInWithPassword({
       email: data.email,
@@ -30,14 +30,12 @@ export default function LoginScreen({ navigation }) {
 
     if (error) {
       setLoading(false);
-      // If Supabase returns invalid credentials, show user-friendly message
       if (error.message.includes("Invalid login credentials")) {
         setAuthError("Invalid email or password. Please try again.");
       } else {
         setAuthError(error.message);
       }
     }
-    // Note: Success is handled by the listener in App.js
   };
 
   return (
@@ -46,7 +44,6 @@ export default function LoginScreen({ navigation }) {
         <Text style={styles.title}>Welcome Back</Text>
         <Text style={styles.subtitle}>Log in to your account</Text>
 
-        {/* 1. Error Indication Banner */}
         {authError ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{authError}</Text>
@@ -63,15 +60,17 @@ export default function LoginScreen({ navigation }) {
                 style={[styles.input, (errors.email || authError) && styles.inputError]}
                 placeholder="email@example.com"
                 placeholderTextColor="#64748b"
+                keyboardType="email-address"
                 onChangeText={(text) => {
                   onChange(text);
-                  setAuthError(''); // Clear error when typing
+                  setAuthError('');
                 }}
                 value={value}
                 autoCapitalize="none"
               />
             )}
           />
+          {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
         </View>
 
         <View style={styles.inputGroup}>
@@ -87,24 +86,21 @@ export default function LoginScreen({ navigation }) {
                 secureTextEntry
                 onChangeText={(text) => {
                   onChange(text);
-                  setAuthError(''); // Clear error when typing
+                  setAuthError('');
                 }}
                 value={value}
               />
             )}
           />
+          {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
         </View>
 
         <TouchableOpacity 
-          style={styles.button} 
+          style={[styles.button, loading && styles.buttonDisabled]} 
           onPress={handleSubmit(onLogin)}
           disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Login</Text>
-          )}
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Login</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => navigation.navigate('Register')} style={styles.footerLink}>
@@ -118,86 +114,21 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: '#000',
-    elevation: 10,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#f8fafc',
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#94a3b8',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  errorBanner: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#ef4444',
-    marginBottom: 20,
-  },
-  errorBannerText: {
-    color: '#ef4444',
-    fontSize: 14,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  inputGroup: {
-    marginBottom: 15,
-  },
-  label: {
-    color: '#e2e8f0',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#0f172a',
-    borderRadius: 12,
-    padding: 15,
-    color: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  inputError: {
-    borderColor: '#ef4444',
-  },
-  button: {
-    backgroundColor: '#6366f1',
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  footerLink: {
-    marginTop: 25,
-    alignItems: 'center',
-  },
-  footerText: {
-    color: '#94a3b8',
-  },
-  linkText: {
-    color: '#6366f1',
-    fontWeight: '700',
-  },
+  container: { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
+  card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, elevation: 10 },
+  title: { fontSize: 28, fontWeight: '800', color: '#f8fafc', textAlign: 'center' },
+  subtitle: { fontSize: 16, color: '#94a3b8', textAlign: 'center', marginBottom: 20 },
+  errorBanner: { backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#ef4444', marginBottom: 20 },
+  errorBannerText: { color: '#ef4444', fontSize: 14, textAlign: 'center', fontWeight: '600' },
+  inputGroup: { marginBottom: 15 },
+  label: { color: '#e2e8f0', fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  input: { backgroundColor: '#0f172a', borderRadius: 12, padding: 15, color: '#f8fafc', borderWidth: 1, borderColor: '#334155' },
+  inputError: { borderColor: '#ef4444' },
+  errorText: { color: '#ef4444', fontSize: 12, marginTop: 5 },
+  button: { backgroundColor: '#6366f1', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  buttonDisabled: { backgroundColor: '#4338ca', opacity: 0.7 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  footerLink: { marginTop: 25, alignItems: 'center' },
+  footerText: { color: '#94a3b8' },
+  linkText: { color: '#6366f1', fontWeight: '700' },
 });

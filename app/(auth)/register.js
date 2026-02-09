@@ -5,24 +5,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '../../lib/supabase';
 
-// 1. Enhanced Validation Schema
 const signUpSchema = z.object({
   username: z.string()
     .min(3, 'Username must be at least 3 characters')
     .max(20, 'Username cannot exceed 20 characters')
     .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'),
-  
   email: z.string()
     .email('Invalid email address')
     .trim()
-    .toLowerCase(), // Normalizes email to prevent duplicate accounts with different casing
-  
+    .toLowerCase(),
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
     .regex(/[A-Z]/, 'Password needs at least one uppercase letter')
     .regex(/[0-9]/, 'Password needs at least one number')
     .regex(/[^a-zA-Z0-9]/, 'Password needs at least one special character'),
-    
   confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -31,6 +27,7 @@ const signUpSchema = z.object({
 
 export default function RegisterScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
 
   const { control, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(signUpSchema),
@@ -39,14 +36,13 @@ export default function RegisterScreen({ navigation }) {
 
   const onRegister = async (data) => {
     setLoading(true);
+    setAuthError('');
     try {
       const { error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
-          data: {
-            username: data.username,
-          }
+          data: { username: data.username }
         }
       });
 
@@ -58,13 +54,13 @@ export default function RegisterScreen({ navigation }) {
         [{ text: "OK", onPress: () => navigation.navigate('Login') }]
       );
     } catch (error) {
-      Alert.alert("Registration Error", error.message);
+      setAuthError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const InputField = ({ label, name, placeholder, secure = false }) => (
+  const InputField = ({ label, name, placeholder, secure = false, keyboardType = "default" }) => (
     <View style={styles.inputGroup}>
       <Text style={styles.label}>{label}</Text>
       <Controller
@@ -72,11 +68,15 @@ export default function RegisterScreen({ navigation }) {
         name={name}
         render={({ field: { onChange, value } }) => (
           <TextInput
-            style={[styles.input, errors[name] && styles.inputError]}
+            style={[styles.input, (errors[name] || (name === 'email' && authError)) && styles.inputError]}
             placeholder={placeholder}
             placeholderTextColor="#64748b"
             secureTextEntry={secure}
-            onChangeText={onChange}
+            keyboardType={keyboardType}
+            onChangeText={(text) => {
+              onChange(text);
+              if(authError) setAuthError('');
+            }}
             value={value}
             autoCapitalize="none"
           />
@@ -92,8 +92,14 @@ export default function RegisterScreen({ navigation }) {
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>Join the innovative community</Text>
 
+        {authError ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>{authError}</Text>
+          </View>
+        ) : null}
+
         <InputField label="Username" name="username" placeholder="johndoe_99" />
-        <InputField label="Email" name="email" placeholder="email@example.com" />
+        <InputField label="Email" name="email" placeholder="email@example.com" keyboardType="email-address" />
         <InputField label="Password" name="password" placeholder="Min 8 chars, 1 upper, 1 symbol" secure />
         <InputField label="Confirm Password" name="confirmPassword" placeholder="••••••••" secure />
 
@@ -102,11 +108,7 @@ export default function RegisterScreen({ navigation }) {
           onPress={handleSubmit(onRegister)}
           disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Sign Up</Text>
-          )}
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign Up</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.footerLink}>
@@ -119,13 +121,14 @@ export default function RegisterScreen({ navigation }) {
   );
 }
 
-// ... styles remain the same ...
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
   card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, elevation: 10 },
   title: { fontSize: 28, fontWeight: '800', color: '#f8fafc', textAlign: 'center' },
-  subtitle: { fontSize: 16, color: '#94a3b8', textAlign: 'center', marginBottom: 30 },
-  inputGroup: { marginBottom: 20 },
+  subtitle: { fontSize: 16, color: '#94a3b8', textAlign: 'center', marginBottom: 20 },
+  errorBanner: { backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#ef4444', marginBottom: 20 },
+  errorBannerText: { color: '#ef4444', fontSize: 14, textAlign: 'center', fontWeight: '600' },
+  inputGroup: { marginBottom: 15 },
   label: { color: '#e2e8f0', fontSize: 14, fontWeight: '600', marginBottom: 8 },
   input: { backgroundColor: '#0f172a', borderRadius: 12, padding: 15, color: '#f8fafc', borderWidth: 1, borderColor: '#334155' },
   inputError: { borderColor: '#ef4444' },

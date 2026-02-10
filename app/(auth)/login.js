@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '../../lib/supabase';
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address').trim().toLowerCase(),
+  email: z.string().min(1, 'Email is required').email('Invalid format').trim().toLowerCase(),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -23,26 +23,33 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     setAuthError('');
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
 
-    if (error) {
+      if (error) {
+        if (error.message.includes("Email not confirmed")) {
+          setAuthError("Check your inbox! You must verify your email link first.");
+        } else if (error.message.includes("Invalid login credentials")) {
+          setAuthError("Wrong email or password.");
+        } else {
+          setAuthError(error.message);
+        }
+      } 
+    } catch (err) {
+      setAuthError("An unexpected error occurred.");
+    } finally {
       setLoading(false);
-      if (error.message.includes("Invalid login credentials")) {
-        setAuthError("Invalid email or password. Please try again.");
-      } else {
-        setAuthError(error.message);
-      }
     }
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.card}>
         <Text style={styles.title}>Welcome Back</Text>
-        <Text style={styles.subtitle}>Log in to your account</Text>
+        <Text style={styles.subtitle}>Log in to continue</Text>
 
         {authError ? (
           <View style={styles.errorBanner}>
@@ -58,7 +65,7 @@ export default function LoginScreen({ navigation }) {
             render={({ field: { onChange, value } }) => (
               <TextInput
                 style={[styles.input, (errors.email || authError) && styles.inputError]}
-                placeholder="email@example.com"
+                placeholder="name@gmail.com"
                 placeholderTextColor="#64748b"
                 keyboardType="email-address"
                 onChangeText={(text) => {
@@ -104,17 +111,15 @@ export default function LoginScreen({ navigation }) {
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => navigation.navigate('Register')} style={styles.footerLink}>
-          <Text style={styles.footerText}>
-            Don't have an account? <Text style={styles.linkText}>Sign Up</Text>
-          </Text>
+          <Text style={styles.footerText}>New here? <Text style={styles.linkText}>Create Account</Text></Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
+  container: { flexGrow: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
   card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, elevation: 10 },
   title: { fontSize: 28, fontWeight: '800', color: '#f8fafc', textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#94a3b8', textAlign: 'center', marginBottom: 20 },

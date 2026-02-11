@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '../../lib/supabase';
 
-// 1. UPDATED VALIDATION SCHEMA
+// 1. ORIGINAL VALIDATION SCHEMA
 const signUpSchema = z.object({
   username: z.string()
     .min(3, 'Username must be at least 3 characters')
@@ -34,15 +34,22 @@ const signUpSchema = z.object({
       message: "Use a real provider (e.g., @gmail.com, @yahoo.com, @outlook.com)"
     }),
 
-  // NEW: Phone Validation
   phone: z.string()
     .min(10, 'Phone number must be at least 10 digits')
-    .max(15, 'Phone number too long')
-    .regex(/^\d+$/, 'Phone must contain digits only'),
+    .max(14, 'Phone number too long')
+    .refine((val) => {
+      const indianPhoneRegex = /^(?:\+91|91)?[6789]\d{9}$/;
+      return indianPhoneRegex.test(val);
+    }, {
+      message: "Enter a valid Indian phone number"
+    }),
 
-  // NEW: DOB Validation (YYYY-MM-DD)
   dob: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD format (e.g. 1995-05-20)'),
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD format (e.g. 1995-05-20)')
+    .refine((date) => {
+        const d = new Date(date);
+        return d instanceof Date && !isNaN(d) && d < new Date();
+    }, { message: "Please enter a valid past date" }),
 
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
@@ -52,7 +59,6 @@ const signUpSchema = z.object({
     
   confirmPassword: z.string(),
 
-  // NEW: Terms & Conditions Checkbox
   terms: z.literal(true, {
     errorMap: () => ({ message: "You must accept the terms to continue" }),
   }),
@@ -78,31 +84,42 @@ export default function RegisterScreen({ navigation }) {
     }
   });
 
+  // 2. UPDATED ONREGISTER (Mapped to SQL Trigger)
   const onRegister = async (data) => {
     setLoading(true);
     setAuthError('');
     try {
-      const { error } = await supabase.auth.signUp({
-        email: data.email,
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: data.email.trim(),
         password: data.password,
         options: { 
           data: { 
-            username: data.username,
-            phone: data.phone,
-            dob: data.dob
+            // These keys MUST match your SQL handle_new_user() function
+            full_name: data.username.trim(),
+            phone_number: data.phone.trim(),
+            date_of_birth: data.dob 
           } 
         }
       });
 
       if (error) throw error;
 
-      Alert.alert(
-        "Verify Your Email",
-        `A link was sent to ${data.email}. You must click it before you can log in.`,
-        [{ text: "OK", onPress: () => navigation.navigate('Login') }]
-      );
+      // Handle successful signup
+      if (authData?.user && authData?.session === null) {
+        Alert.alert(
+          "Success",
+          "Registration successful! Please check your email for a verification link.",
+          [{ text: "OK", onPress: () => navigation.navigate('Login') }]
+        );
+      } else {
+        // If email confirmation is off, go straight to Login/Home
+        navigation.navigate('Login');
+      }
+
     } catch (error) {
-      setAuthError(error.message);
+      console.error("Signup Details:", error);
+      // Clean up the error message for the user
+      setAuthError(error.message || "An unexpected error occurred");
     } finally {
       setLoading(false);
     }
@@ -148,12 +165,11 @@ export default function RegisterScreen({ navigation }) {
 
         <InputField label="Username" name="username" placeholder="johndoe" />
         <InputField label="Email" name="email" placeholder="name@gmail.com" keyboardType="email-address" />
-        <InputField label="Phone Number" name="phone" placeholder="1234567890" keyboardType="phone-pad" />
+        <InputField label="Phone Number" name="phone" placeholder="9876543210" keyboardType="phone-pad" />
         <InputField label="Date of Birth" name="dob" placeholder="YYYY-MM-DD" />
         <InputField label="Password" name="password" placeholder="••••••••" secure />
         <InputField label="Confirm Password" name="confirmPassword" placeholder="••••••••" secure />
 
-        {/* CUSTOM CHECKBOX FOR TERMS */}
         <View style={styles.checkboxWrapper}>
             <Controller
                 control={control}
@@ -187,6 +203,7 @@ export default function RegisterScreen({ navigation }) {
   );
 }
 
+// 3. ORIGINAL STYLING
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
   card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, elevation: 10 },

@@ -12,10 +12,6 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "extra": {
-      "supabaseUrl": "https://cdhfbndqavziaqukyskv.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkaGZibmRxYXZ6aWFxdWt5c2t2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNTA1ODcsImV4cCI6MjA4NTYyNjU4N30.u4rMRO6UxrdDl8HTjTJPyuYtBfcDR04pYghfJgo500o"
-    },
     "ios": {
       "supportsTablet": true
     },

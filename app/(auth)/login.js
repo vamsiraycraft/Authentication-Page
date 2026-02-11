@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -24,7 +24,7 @@ export default function LoginScreen({ navigation }) {
     setAuthError('');
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
@@ -37,7 +37,12 @@ export default function LoginScreen({ navigation }) {
         } else {
           setAuthError(error.message);
         }
-      } 
+      } else if (signInData.user) {
+        // SUCCESS: Navigate to Profile
+        // If you use an Auth listener in App.js, this navigation might happen automatically.
+        // If not, we manually replace the stack so they can't "Go Back" to login.
+        navigation.replace('Profile'); 
+      }
     } catch (err) {
       setAuthError("An unexpected error occurred.");
     } finally {
@@ -68,6 +73,7 @@ export default function LoginScreen({ navigation }) {
                 placeholder="name@gmail.com"
                 placeholderTextColor="#64748b"
                 keyboardType="email-address"
+                autoComplete="email"
                 onChangeText={(text) => {
                   onChange(text);
                   setAuthError('');
@@ -91,6 +97,7 @@ export default function LoginScreen({ navigation }) {
                 placeholder="••••••••"
                 placeholderTextColor="#64748b"
                 secureTextEntry
+                autoComplete="password"
                 onChangeText={(text) => {
                   onChange(text);
                   setAuthError('');
@@ -118,6 +125,7 @@ export default function LoginScreen({ navigation }) {
   );
 }
 
+// ORIGINAL STYLING (Unchanged)
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
   card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, elevation: 10 },

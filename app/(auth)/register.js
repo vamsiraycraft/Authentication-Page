@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '../../lib/supabase';
+
+// Import the picker ONLY if we are not on web to avoid the crash
+let DateTimePicker;
+if (Platform.OS !== 'web') {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
 
 // 1. ORIGINAL VALIDATION SCHEMA
 const signUpSchema = z.object({
@@ -44,12 +50,11 @@ const signUpSchema = z.object({
       message: "Enter a valid Indian phone number"
     }),
 
-  dob: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD format (e.g. 1995-05-20)')
-    .refine((date) => {
-        const d = new Date(date);
-        return d instanceof Date && !isNaN(d) && d < new Date();
-    }, { message: "Please enter a valid past date" }),
+  // Updated to handle both Date objects and String dates (for web compatibility)
+  dob: z.any().refine((val) => {
+    const date = new Date(val);
+    return date instanceof Date && !isNaN(date) && date < new Date();
+  }, { message: "Please enter a valid past date" }),
 
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
@@ -70,8 +75,9 @@ const signUpSchema = z.object({
 export default function RegisterScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const { control, handleSubmit, formState: { errors } } = useForm({
+  const { control, handleSubmit, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(signUpSchema),
     defaultValues: { 
         username: '', 
@@ -84,41 +90,34 @@ export default function RegisterScreen({ navigation }) {
     }
   });
 
-  // 2. UPDATED ONREGISTER (Mapped to SQL Trigger)
   const onRegister = async (data) => {
     setLoading(true);
     setAuthError('');
     try {
+      // Ensure date is in YYYY-MM-DD format regardless of platform
+      const dateObj = new Date(data.dob);
+      const formattedDob = dateObj.toISOString().split('T')[0];
+
       const { data: authData, error } = await supabase.auth.signUp({
         email: data.email.trim(),
         password: data.password,
         options: { 
           data: { 
-            // These keys MUST match your SQL handle_new_user() function
             full_name: data.username.trim(),
             phone_number: data.phone.trim(),
-            date_of_birth: data.dob 
+            date_of_birth: formattedDob 
           } 
         }
       });
 
       if (error) throw error;
 
-      // Handle successful signup
       if (authData?.user && authData?.session === null) {
-        Alert.alert(
-          "Success",
-          "Registration successful! Please check your email for a verification link.",
-          [{ text: "OK", onPress: () => navigation.navigate('Login') }]
-        );
+        Alert.alert("Success", "Registration successful! Please verify email.", [{ text: "OK", onPress: () => navigation.navigate('Login') }]);
       } else {
-        // If email confirmation is off, go straight to Login/Home
         navigation.navigate('Login');
       }
-
     } catch (error) {
-      console.error("Signup Details:", error);
-      // Clean up the error message for the user
       setAuthError(error.message || "An unexpected error occurred");
     } finally {
       setLoading(false);
@@ -166,7 +165,65 @@ export default function RegisterScreen({ navigation }) {
         <InputField label="Username" name="username" placeholder="johndoe" />
         <InputField label="Email" name="email" placeholder="name@gmail.com" keyboardType="email-address" />
         <InputField label="Phone Number" name="phone" placeholder="9876543210" keyboardType="phone-pad" />
-        <InputField label="Date of Birth" name="dob" placeholder="YYYY-MM-DD" />
+
+        {/* --- CROSS-PLATFORM DOB SECTION --- */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Date of Birth</Text>
+          <Controller
+            control={control}
+            name="dob"
+            render={({ field: { value, onChange } }) => (
+              <>
+                {Platform.OS === 'web' ? (
+                  /* Web version uses native HTML5 date picker */
+                  <input
+                    type="date"
+                    style={{
+                      ...styles.input,
+                      backgroundColor: '#0f172a',
+                      color: value ? '#f8fafc' : '#64748b',
+                      outline: 'none',
+                    }}
+                    value={value || ''}
+                    onChange={(e) => onChange(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                ) : (
+                  /* Mobile version uses Touchable + DateTimePicker */
+                  <>
+                    <TouchableOpacity 
+                      activeOpacity={0.7}
+                      style={[styles.input, errors.dob && styles.inputError, styles.dateDropdown]} 
+                      onPress={() => setShowDatePicker(true)}
+                    >
+                      <Text style={{ color: value ? '#f8fafc' : '#64748b' }}>
+                        {value ? new Date(value).toLocaleDateString() : "Select Date"}
+                      </Text>
+                      <Text style={styles.dropdownIcon}>▼</Text>
+                    </TouchableOpacity>
+
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={value ? new Date(value) : new Date(2000, 0, 1)}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+                        maximumDate={new Date()}
+                        onChange={(event, selectedDate) => {
+                          setShowDatePicker(false);
+                          if (selectedDate) {
+                            onChange(selectedDate);
+                          }
+                        }}
+                      />
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          />
+          {errors.dob && <Text style={styles.errorText}>{errors.dob.message}</Text>}
+        </View>
+
         <InputField label="Password" name="password" placeholder="••••••••" secure />
         <InputField label="Confirm Password" name="confirmPassword" placeholder="••••••••" secure />
 
@@ -203,7 +260,6 @@ export default function RegisterScreen({ navigation }) {
   );
 }
 
-// 3. ORIGINAL STYLING
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
   card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, elevation: 10 },
@@ -216,6 +272,8 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#0f172a', borderRadius: 12, padding: 15, color: '#f8fafc', borderWidth: 1, borderColor: '#334155' },
   inputError: { borderColor: '#ef4444' },
   errorText: { color: '#ef4444', fontSize: 12, marginTop: 5 },
+  dateDropdown: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  dropdownIcon: { color: '#94a3b8', fontSize: 12 },
   checkboxWrapper: { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 5 },
   checkbox: { width: 22, height: 22, borderWidth: 2, borderColor: '#6366f1', borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
   checkboxChecked: { backgroundColor: '#6366f1' },

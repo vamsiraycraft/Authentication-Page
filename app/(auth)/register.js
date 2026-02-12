@@ -50,7 +50,6 @@ const signUpSchema = z.object({
       message: "Enter a valid Indian phone number"
     }),
 
-  // Updated to handle both Date objects and String dates (for web compatibility)
   dob: z.any().refine((val) => {
     const date = new Date(val);
     return date instanceof Date && !isNaN(date) && date < new Date();
@@ -76,6 +75,10 @@ export default function RegisterScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  
+  // EXTRA CAUTION STATES
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
   const { control, handleSubmit, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(signUpSchema),
@@ -94,7 +97,6 @@ export default function RegisterScreen({ navigation }) {
     setLoading(true);
     setAuthError('');
     try {
-      // Ensure date is in YYYY-MM-DD format regardless of platform
       const dateObj = new Date(data.dob);
       const formattedDob = dateObj.toISOString().split('T')[0];
 
@@ -112,10 +114,10 @@ export default function RegisterScreen({ navigation }) {
 
       if (error) throw error;
 
-      if (authData?.user && authData?.session === null) {
-        Alert.alert("Success", "Registration successful! Please verify email.", [{ text: "OK", onPress: () => navigation.navigate('Login') }]);
-      } else {
-        navigation.navigate('Login');
+      // SUCCESS HANDLING WITH CAUTION
+      if (authData?.user) {
+        setRegisteredEmail(data.email.trim());
+        setIsRegistered(true); // Switches UI to the "Verify Email" screen
       }
     } catch (error) {
       setAuthError(error.message || "An unexpected error occurred");
@@ -150,6 +152,40 @@ export default function RegisterScreen({ navigation }) {
     </View>
   );
 
+  // --- EXTRA CAUTION VIEW (POST-REGISTRATION) ---
+  if (isRegistered) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center' }]}>
+        <View style={styles.card}>
+          <Text style={[styles.title, { fontSize: 50, marginBottom: 10 }]}>📧</Text>
+          <Text style={styles.title}>Check Your Email</Text>
+          <Text style={styles.subtitle}>
+            We've sent a verification link to:{"\n"}
+            <Text style={{ color: '#f8fafc', fontWeight: 'bold' }}>{registeredEmail}</Text>
+          </Text>
+
+          <View style={styles.cautionBanner}>
+             <Text style={styles.cautionText}>
+               Note: You cannot log in until you click the confirmation link in your email.
+             </Text>
+          </View>
+
+          <TouchableOpacity 
+            style={styles.button} 
+            onPress={() => navigation.navigate('Login')}
+          >
+            <Text style={styles.buttonText}>Proceed to Login</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setIsRegistered(false)} style={styles.footerLink}>
+            <Text style={styles.linkText}>Back to Registration</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // --- ORIGINAL REGISTRATION VIEW ---
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.card}>
@@ -166,7 +202,6 @@ export default function RegisterScreen({ navigation }) {
         <InputField label="Email" name="email" placeholder="name@gmail.com" keyboardType="email-address" />
         <InputField label="Phone Number" name="phone" placeholder="9876543210" keyboardType="phone-pad" />
 
-        {/* --- CROSS-PLATFORM DOB SECTION --- */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Date of Birth</Text>
           <Controller
@@ -175,7 +210,6 @@ export default function RegisterScreen({ navigation }) {
             render={({ field: { value, onChange } }) => (
               <>
                 {Platform.OS === 'web' ? (
-                  /* Web version uses native HTML5 date picker */
                   <input
                     type="date"
                     style={{
@@ -189,7 +223,6 @@ export default function RegisterScreen({ navigation }) {
                     max={new Date().toISOString().split('T')[0]}
                   />
                 ) : (
-                  /* Mobile version uses Touchable + DateTimePicker */
                   <>
                     <TouchableOpacity 
                       activeOpacity={0.7}
@@ -267,6 +300,8 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 16, color: '#94a3b8', textAlign: 'center', marginBottom: 20 },
   errorBanner: { backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#ef4444', marginBottom: 20 },
   errorBannerText: { color: '#ef4444', fontSize: 14, textAlign: 'center', fontWeight: '600' },
+  cautionBanner: { backgroundColor: 'rgba(99, 102, 241, 0.1)', padding: 12, borderRadius: 12, marginVertical: 20, borderLeftWidth: 4, borderLeftColor: '#6366f1' },
+  cautionText: { color: '#94a3b8', fontSize: 13, lineHeight: 18 },
   inputGroup: { marginBottom: 15 },
   label: { color: '#e2e8f0', fontSize: 14, fontWeight: '600', marginBottom: 8 },
   input: { backgroundColor: '#0f172a', borderRadius: 12, padding: 15, color: '#f8fafc', borderWidth: 1, borderColor: '#334155' },

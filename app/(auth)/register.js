@@ -11,7 +11,6 @@ if (Platform.OS !== 'web') {
   DateTimePicker = require('@react-native-community/datetimepicker').default;
 }
 
-// 1. ORIGINAL VALIDATION SCHEMA
 const signUpSchema = z.object({
   username: z.string()
     .min(3, 'Username must be at least 3 characters')
@@ -51,6 +50,7 @@ const signUpSchema = z.object({
     }),
 
   dob: z.any().refine((val) => {
+    if (!val) return false;
     const date = new Date(val);
     return date instanceof Date && !isNaN(date) && date < new Date();
   }, { message: "Please enter a valid past date" }),
@@ -75,10 +75,7 @@ export default function RegisterScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
-  
-  // EXTRA CAUTION STATES
-  const [isRegistered, setIsRegistered] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState('');
+  const [isSuccess, setIsSuccess] = useState(false); // Success state
 
   const { control, handleSubmit, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(signUpSchema),
@@ -114,10 +111,11 @@ export default function RegisterScreen({ navigation }) {
 
       if (error) throw error;
 
-      // SUCCESS HANDLING WITH CAUTION
-      if (authData?.user) {
-        setRegisteredEmail(data.email.trim());
-        setIsRegistered(true); // Switches UI to the "Verify Email" screen
+      // If user is created but needs email verification
+      if (authData?.user && authData?.session === null) {
+        setIsSuccess(true);
+      } else {
+        navigation.navigate('Login');
       }
     } catch (error) {
       setAuthError(error.message || "An unexpected error occurred");
@@ -152,142 +150,131 @@ export default function RegisterScreen({ navigation }) {
     </View>
   );
 
-  // --- EXTRA CAUTION VIEW (POST-REGISTRATION) ---
-  if (isRegistered) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center' }]}>
-        <View style={styles.card}>
-          <Text style={[styles.title, { fontSize: 50, marginBottom: 10 }]}>📧</Text>
-          <Text style={styles.title}>Check Your Email</Text>
-          <Text style={styles.subtitle}>
-            We've sent a verification link to:{"\n"}
-            <Text style={{ color: '#f8fafc', fontWeight: 'bold' }}>{registeredEmail}</Text>
-          </Text>
-
-          <View style={styles.cautionBanner}>
-             <Text style={styles.cautionText}>
-               Note: You cannot log in until you click the confirmation link in your email.
-             </Text>
-          </View>
-
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={() => navigation.navigate('Login')}
-          >
-            <Text style={styles.buttonText}>Proceed to Login</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => setIsRegistered(false)} style={styles.footerLink}>
-            <Text style={styles.linkText}>Back to Registration</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // --- ORIGINAL REGISTRATION VIEW ---
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Fill in your details below</Text>
-
-        {authError ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{authError}</Text>
+        {isSuccess ? (
+          /* --- NEW SUCCESS VIEW --- */
+          <View style={styles.successContainer}>
+            <View style={styles.successIconCircle}>
+              <Text style={styles.successIconText}>✉️</Text>
+            </View>
+            <Text style={styles.title}>Check your email</Text>
+            <Text style={styles.successSubtitle}>
+              We've sent a verification link to your email. Please verify to complete your registration.
+            </Text>
+            <TouchableOpacity 
+              style={[styles.button, { width: '100%' }]} 
+              onPress={() => navigation.navigate('Login')}
+            >
+              <Text style={styles.buttonText}>Back to Login</Text>
+            </TouchableOpacity>
           </View>
-        ) : null}
+        ) : (
+          /* --- ORIGINAL FORM VIEW --- */
+          <>
+            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.subtitle}>Fill in your details below</Text>
 
-        <InputField label="Username" name="username" placeholder="johndoe" />
-        <InputField label="Email" name="email" placeholder="name@gmail.com" keyboardType="email-address" />
-        <InputField label="Phone Number" name="phone" placeholder="9876543210" keyboardType="phone-pad" />
+            {authError ? (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>{authError}</Text>
+              </View>
+            ) : null}
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Date of Birth</Text>
-          <Controller
-            control={control}
-            name="dob"
-            render={({ field: { value, onChange } }) => (
-              <>
-                {Platform.OS === 'web' ? (
-                  <input
-                    type="date"
-                    style={{
-                      ...styles.input,
-                      backgroundColor: '#0f172a',
-                      color: value ? '#f8fafc' : '#64748b',
-                      outline: 'none',
-                    }}
-                    value={value || ''}
-                    onChange={(e) => onChange(e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
-                  />
-                ) : (
+            <InputField label="Username" name="username" placeholder="johndoe" />
+            <InputField label="Email" name="email" placeholder="name@gmail.com" keyboardType="email-address" />
+            <InputField label="Phone Number" name="phone" placeholder="9876543210" keyboardType="phone-pad" />
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Date of Birth</Text>
+              <Controller
+                control={control}
+                name="dob"
+                render={({ field: { value, onChange } }) => (
                   <>
-                    <TouchableOpacity 
-                      activeOpacity={0.7}
-                      style={[styles.input, errors.dob && styles.inputError, styles.dateDropdown]} 
-                      onPress={() => setShowDatePicker(true)}
-                    >
-                      <Text style={{ color: value ? '#f8fafc' : '#64748b' }}>
-                        {value ? new Date(value).toLocaleDateString() : "Select Date"}
-                      </Text>
-                      <Text style={styles.dropdownIcon}>▼</Text>
-                    </TouchableOpacity>
-
-                    {showDatePicker && (
-                      <DateTimePicker
-                        value={value ? new Date(value) : new Date(2000, 0, 1)}
-                        mode="date"
-                        display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
-                        maximumDate={new Date()}
-                        onChange={(event, selectedDate) => {
-                          setShowDatePicker(false);
-                          if (selectedDate) {
-                            onChange(selectedDate);
-                          }
+                    {Platform.OS === 'web' ? (
+                      <input
+                        type="date"
+                        style={{
+                          backgroundColor: '#0f172a',
+                          color: value ? '#f8fafc' : '#64748b',
+                          border: '1px solid #334155',
+                          borderRadius: '12px',
+                          padding: '15px',
+                          width: '100%',
+                          outline: 'none',
+                          boxSizing: 'border-box'
                         }}
+                        value={value || ''}
+                        onChange={(e) => onChange(e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
                       />
+                    ) : (
+                      <>
+                        <TouchableOpacity 
+                          activeOpacity={0.7}
+                          style={[styles.input, errors.dob && styles.inputError, styles.dateDropdown]} 
+                          onPress={() => setShowDatePicker(true)}
+                        >
+                          <Text style={{ color: value ? '#f8fafc' : '#64748b' }}>
+                            {value ? new Date(value).toLocaleDateString() : "Select Date"}
+                          </Text>
+                          <Text style={styles.dropdownIcon}>▼</Text>
+                        </TouchableOpacity>
+                        {showDatePicker && (
+                          <DateTimePicker
+                            value={value ? new Date(value) : new Date(2000, 0, 1)}
+                            mode="date"
+                            display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+                            maximumDate={new Date()}
+                            onChange={(event, selectedDate) => {
+                              setShowDatePicker(false);
+                              if (selectedDate) onChange(selectedDate);
+                            }}
+                          />
+                        )}
+                      </>
                     )}
                   </>
                 )}
-              </>
-            )}
-          />
-          {errors.dob && <Text style={styles.errorText}>{errors.dob.message}</Text>}
-        </View>
+              />
+              {errors.dob && <Text style={styles.errorText}>{errors.dob.message}</Text>}
+            </View>
 
-        <InputField label="Password" name="password" placeholder="••••••••" secure />
-        <InputField label="Confirm Password" name="confirmPassword" placeholder="••••••••" secure />
+            <InputField label="Password" name="password" placeholder="••••••••" secure />
+            <InputField label="Confirm Password" name="confirmPassword" placeholder="••••••••" secure />
 
-        <View style={styles.checkboxWrapper}>
-            <Controller
-                control={control}
-                name="terms"
-                render={({ field: { onChange, value } }) => (
-                    <TouchableOpacity 
-                        style={[styles.checkbox, value && styles.checkboxChecked]} 
-                        onPress={() => onChange(!value)}
-                    >
-                        {value && <Text style={styles.checkboxTick}>✓</Text>}
-                    </TouchableOpacity>
-                )}
-            />
-            <Text style={styles.checkboxText}>I agree to the <Text style={styles.linkText}>Terms & Conditions</Text></Text>
-        </View>
-        {errors.terms && <Text style={styles.errorText}>{errors.terms.message}</Text>}
+            <View style={styles.checkboxWrapper}>
+                <Controller
+                    control={control}
+                    name="terms"
+                    render={({ field: { onChange, value } }) => (
+                        <TouchableOpacity 
+                            style={[styles.checkbox, value && styles.checkboxChecked]} 
+                            onPress={() => onChange(!value)}
+                        >
+                            {value && <Text style={styles.checkboxTick}>✓</Text>}
+                        </TouchableOpacity>
+                    )}
+                />
+                <Text style={styles.checkboxText}>I agree to the <Text style={styles.linkText}>Terms & Conditions</Text></Text>
+            </View>
+            {errors.terms && <Text style={styles.errorText}>{errors.terms.message}</Text>}
 
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.buttonDisabled]} 
-          onPress={handleSubmit(onRegister)}
-          disabled={loading}
-        >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign Up</Text>}
-        </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.button, loading && styles.buttonDisabled]} 
+              onPress={handleSubmit(onRegister)}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign Up</Text>}
+            </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.footerLink}>
-          <Text style={styles.footerText}>Already have an account? <Text style={styles.linkText}>Login</Text></Text>
-        </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.footerLink}>
+              <Text style={styles.footerText}>Already have an account? <Text style={styles.linkText}>Login</Text></Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </ScrollView>
   );
@@ -300,8 +287,6 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 16, color: '#94a3b8', textAlign: 'center', marginBottom: 20 },
   errorBanner: { backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#ef4444', marginBottom: 20 },
   errorBannerText: { color: '#ef4444', fontSize: 14, textAlign: 'center', fontWeight: '600' },
-  cautionBanner: { backgroundColor: 'rgba(99, 102, 241, 0.1)', padding: 12, borderRadius: 12, marginVertical: 20, borderLeftWidth: 4, borderLeftColor: '#6366f1' },
-  cautionText: { color: '#94a3b8', fontSize: 13, lineHeight: 18 },
   inputGroup: { marginBottom: 15 },
   label: { color: '#e2e8f0', fontSize: 14, fontWeight: '600', marginBottom: 8 },
   input: { backgroundColor: '#0f172a', borderRadius: 12, padding: 15, color: '#f8fafc', borderWidth: 1, borderColor: '#334155' },
@@ -320,4 +305,9 @@ const styles = StyleSheet.create({
   footerLink: { marginTop: 25, alignItems: 'center' },
   footerText: { color: '#94a3b8', fontSize: 14 },
   linkText: { color: '#6366f1', fontWeight: '700' },
+  /* Success Styles */
+  successContainer: { alignItems: 'center', paddingVertical: 10 },
+  successIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(99, 102, 241, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 2, borderColor: '#6366f1' },
+  successIconText: { fontSize: 40 },
+  successSubtitle: { fontSize: 16, color: '#94a3b8', textAlign: 'center', marginTop: 12, marginBottom: 30, lineHeight: 24 },
 });

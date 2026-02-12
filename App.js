@@ -12,7 +12,6 @@ const ProfileScreen = () => {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   
-  // Temporary state for editing fields
   const [editUsername, setEditUsername] = useState('');
   const [editPhone, setEditPhone] = useState('');
 
@@ -23,25 +22,32 @@ const ProfileScreen = () => {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
       
+      if (userError) throw userError;
+
       if (user) {
+        // Using maybeSingle() instead of single() to prevent 406/PGRST116 errors
         const { data, error } = await supabase
           .from('profiles')
           .select('username, phone_number, dob') 
           .eq('id', user.id)
-          .single();
+          .maybeSingle(); 
 
         if (error) throw error;
 
-        setProfile({ ...data, email: user.email });
-        
-        // Populate edit fields with current data
-        setEditUsername(data.username || '');
-        setEditPhone(data.phone_number || '');
+        if (data) {
+          setProfile({ ...data, email: user.email });
+          setEditUsername(data.username || '');
+          setEditPhone(data.phone_number || '');
+        } else {
+          // If no profile row exists, just show the email from Auth
+          setProfile({ email: user.email });
+        }
       }
     } catch (error) {
       console.error("Profile Fetch Error:", error.message);
+      // If you still see 406 here, the issue is purely in the Supabase Dashboard cache
     } finally {
       setLoading(false);
     }
@@ -52,21 +58,23 @@ const ProfileScreen = () => {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
 
+      // Upsert ensures that if the row was missing (causing the 406), it gets created now
       const { error } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id,
           username: editUsername,
           phone_number: editPhone,
-        })
-        .eq('id', user.id);
+          updated_at: new Date().toISOString(),
+        });
 
       if (error) throw error;
 
       Alert.alert("Success", "Profile updated successfully!");
       setIsEditing(false);
-      fetchProfile(); // Refresh the profile data
+      fetchProfile(); 
     } catch (error) {
-      Alert.alert("Error", error.message);
+      Alert.alert("Update Error", error.message);
     } finally {
       setLoading(false);
     }
@@ -87,7 +95,6 @@ const ProfileScreen = () => {
             <ActivityIndicator color="#6366f1" size="large" />
           ) : (
             <>
-              {/* Username Section */}
               <View style={styles.infoBox}>
                 <Text style={styles.infoLabel}>Username</Text>
                 {isEditing ? (
@@ -99,17 +106,15 @@ const ProfileScreen = () => {
                     placeholderTextColor="#64748b"
                   />
                 ) : (
-                  <Text style={styles.infoValue}>{profile?.username || 'N/A'}</Text>
+                  <Text style={styles.infoValue}>{profile?.username || 'Not set'}</Text>
                 )}
               </View>
 
-              {/* Email Section (Read Only) */}
               <View style={[styles.infoBox, { opacity: 0.6 }]}>
                 <Text style={styles.infoLabel}>Email Address</Text>
-                <Text style={styles.infoValue}>{profile?.email}</Text>
+                <Text style={styles.infoValue}>{profile?.email || 'Loading...'}</Text>
               </View>
 
-              {/* Phone Section */}
               <View style={styles.infoBox}>
                 <Text style={styles.infoLabel}>Phone Number</Text>
                 {isEditing ? (
@@ -126,7 +131,6 @@ const ProfileScreen = () => {
                 )}
               </View>
 
-              {/* DOB Section (Read Only in this view) */}
               <View style={[styles.infoBox, { opacity: isEditing ? 0.6 : 1 }]}>
                 <Text style={styles.infoLabel}>Date of Birth</Text>
                 <Text style={styles.infoValue}>{profile?.dob || 'Not provided'}</Text>
@@ -134,7 +138,6 @@ const ProfileScreen = () => {
             </>
           )}
 
-          {/* Action Buttons */}
           <View style={{ width: '100%', marginTop: 10 }}>
             {isEditing ? (
               <>
@@ -176,7 +179,6 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -215,13 +217,10 @@ const styles = StyleSheet.create({
   infoLabel: { color: '#6366f1', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' },
   infoValue: { color: '#f8fafc', fontSize: 16, marginTop: 4, fontWeight: '600' },
   editInput: { color: '#f8fafc', fontSize: 16, marginTop: 4, fontWeight: '600', padding: 0, borderBottomWidth: 1, borderBottomColor: '#334155' },
-  
-  // Buttons
   editButton: { backgroundColor: '#6366f1', padding: 15, borderRadius: 12, width: '100%', alignItems: 'center', marginTop: 10 },
   saveButton: { backgroundColor: '#10b981', padding: 15, borderRadius: 12, width: '100%', alignItems: 'center', marginTop: 10 },
   signOutButton: { backgroundColor: '#ef4444', padding: 15, borderRadius: 12, width: '100%', alignItems: 'center', marginTop: 10 },
   cancelButton: { padding: 15, width: '100%', alignItems: 'center' },
-  
   buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   cancelText: { color: '#94a3b8', fontWeight: '600' },
 });

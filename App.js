@@ -11,155 +11,59 @@ const ProfileScreen = () => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  
   const [editUsername, setEditUsername] = useState('');
   const [editPhone, setEditPhone] = useState('');
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  useEffect(() => { fetchProfile(); }, []);
 
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError) throw userError;
-
+      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Using maybeSingle() instead of single() to prevent 406/PGRST116 errors
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('username, phone_number, dob') 
-          .eq('id', user.id)
-          .maybeSingle(); 
-
-        if (error) throw error;
-
-        if (data) {
-          setProfile({ ...data, email: user.email });
-          setEditUsername(data.username || '');
-          setEditPhone(data.phone_number || '');
-        } else {
-          // If no profile row exists, just show the email from Auth
-          setProfile({ email: user.email });
-        }
+        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+        setProfile({ ...data, email: user.email });
+        setEditUsername(data?.username || '');
+        setEditPhone(data?.phone_number || '');
       }
-    } catch (error) {
-      console.error("Profile Fetch Error:", error.message);
-      // If you still see 406 here, the issue is purely in the Supabase Dashboard cache
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleUpdate = async () => {
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-
-      // Upsert ensures that if the row was missing (causing the 406), it gets created now
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          username: editUsername,
-          phone_number: editPhone,
-          updated_at: new Date().toISOString(),
-        });
-
-      if (error) throw error;
-
-      Alert.alert("Success", "Profile updated successfully!");
-      setIsEditing(false);
-      fetchProfile(); 
-    } catch (error) {
-      Alert.alert("Update Error", error.message);
-    } finally {
-      setLoading(false);
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from('profiles').upsert({ id: user.id, username: editUsername, phone_number: editPhone });
+    if (!error) { Alert.alert("Updated!"); setIsEditing(false); fetchProfile(); }
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
+  const ProfileTile = ({ icon, label, value, editable, onChange }) => (
+    <View style={styles.tile}>
+        <View style={styles.tileIcon}><Text style={{fontSize: 20}}>{icon}</Text></View>
+        <View style={{flex: 1}}>
+            <Text style={styles.tileLabel}>{label}</Text>
+            {editable ? <TextInput style={styles.tileInput} value={value} onChangeText={onChange} /> : <Text style={styles.tileValue}>{value || '—'}</Text>}
+        </View>
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ justifyContent: 'center', flexGrow: 1 }}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Account Profile</Text>
-          <Text style={styles.subtitle}>{isEditing ? 'Update your details' : 'Welcome back!'}</Text>
-          
-          {loading && !isEditing ? (
-            <ActivityIndicator color="#6366f1" size="large" />
-          ) : (
-            <>
-              <View style={styles.infoBox}>
-                <Text style={styles.infoLabel}>Username</Text>
-                {isEditing ? (
-                  <TextInput 
-                    style={styles.editInput} 
-                    value={editUsername} 
-                    onChangeText={setEditUsername}
-                    placeholder="Enter username"
-                    placeholderTextColor="#64748b"
-                  />
-                ) : (
-                  <Text style={styles.infoValue}>{profile?.username || 'Not set'}</Text>
-                )}
-              </View>
-
-              <View style={[styles.infoBox, { opacity: 0.6 }]}>
-                <Text style={styles.infoLabel}>Email Address</Text>
-                <Text style={styles.infoValue}>{profile?.email || 'Loading...'}</Text>
-              </View>
-
-              <View style={styles.infoBox}>
-                <Text style={styles.infoLabel}>Phone Number</Text>
-                {isEditing ? (
-                  <TextInput 
-                    style={styles.editInput} 
-                    value={editPhone} 
-                    onChangeText={setEditPhone}
-                    keyboardType="phone-pad"
-                    placeholder="Enter phone number"
-                    placeholderTextColor="#64748b"
-                  />
-                ) : (
-                  <Text style={styles.infoValue}>{profile?.phone_number || 'Not provided'}</Text>
-                )}
-              </View>
-
-              <View style={[styles.infoBox, { opacity: isEditing ? 0.6 : 1 }]}>
-                <Text style={styles.infoLabel}>Date of Birth</Text>
-                <Text style={styles.infoValue}>{profile?.dob || 'Not provided'}</Text>
-              </View>
-            </>
-          )}
-
-          <View style={{ width: '100%', marginTop: 10 }}>
-            {isEditing ? (
-              <>
-                <TouchableOpacity style={styles.saveButton} onPress={handleUpdate}>
-                  <Text style={styles.buttonText}>Save Changes</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelButton} onPress={() => setIsEditing(false)}>
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(true)}>
-                  <Text style={styles.buttonText}>Edit Profile</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-                  <Text style={styles.buttonText}>Sign Out</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+    <SafeAreaView style={{flex: 1, backgroundColor: '#020617'}}>
+      <ScrollView contentContainerStyle={{padding: 20}}>
+        <View style={styles.header}>
+            <View style={styles.avatar}><Text style={{fontSize: 40}}>👤</Text></View>
+            <Text style={styles.headerTitle}>{profile?.username || 'Member'}</Text>
+            <Text style={styles.headerSubtitle}>{profile?.email}</Text>
         </View>
+
+        <ProfileTile icon="👤" label="User Name" value={isEditing ? editUsername : profile?.username} editable={isEditing} onChange={setEditUsername} />
+        <ProfileTile icon="📞" label="Mobile" value={isEditing ? editPhone : profile?.phone_number} editable={isEditing} onChange={setEditPhone} />
+        <ProfileTile icon="📅" label="Date of Birth" value={profile?.dob} />
+
+        <TouchableOpacity style={isEditing ? styles.btnSave : styles.btnEdit} onPress={() => isEditing ? handleUpdate() : setIsEditing(true)}>
+            <Text style={styles.btnText}>{isEditing ? "Save Profile" : "Edit Details"}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.btnSignOut} onPress={() => supabase.auth.signOut()}>
+            <Text style={styles.btnText}>Sign Out</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -172,36 +76,17 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
+    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setLoading(false); });
+    supabase.auth.onAuthStateChange((_event, session) => setSession(session));
   }, []);
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#6366f1" />
-      </View>
-    );
-  }
+  if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color="#6366f1" /></View>;
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {session && session.user ? (
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-        ) : (
-          <>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-          </>
+        {session ? <Stack.Screen name="Profile" component={ProfileScreen} /> : (
+          <><Stack.Screen name="Login" component={LoginScreen} /><Stack.Screen name="Register" component={RegisterScreen} /></>
         )}
       </Stack.Navigator>
     </NavigationContainer>
@@ -209,18 +94,18 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a', padding: 20 },
-  card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, alignItems: 'center', elevation: 10 },
-  title: { fontSize: 24, fontWeight: '800', color: '#f8fafc', marginBottom: 5 },
-  subtitle: { fontSize: 16, color: '#94a3b8', marginBottom: 25 },
-  infoBox: { width: '100%', backgroundColor: '#0f172a', padding: 15, borderRadius: 12, marginBottom: 15, borderLeftWidth: 4, borderLeftColor: '#6366f1' },
-  infoLabel: { color: '#6366f1', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' },
-  infoValue: { color: '#f8fafc', fontSize: 16, marginTop: 4, fontWeight: '600' },
-  editInput: { color: '#f8fafc', fontSize: 16, marginTop: 4, fontWeight: '600', padding: 0, borderBottomWidth: 1, borderBottomColor: '#334155' },
-  editButton: { backgroundColor: '#6366f1', padding: 15, borderRadius: 12, width: '100%', alignItems: 'center', marginTop: 10 },
-  saveButton: { backgroundColor: '#10b981', padding: 15, borderRadius: 12, width: '100%', alignItems: 'center', marginTop: 10 },
-  signOutButton: { backgroundColor: '#ef4444', padding: 15, borderRadius: 12, width: '100%', alignItems: 'center', marginTop: 10 },
-  cancelButton: { padding: 15, width: '100%', alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  cancelText: { color: '#94a3b8', fontWeight: '600' },
+  loader: { flex: 1, backgroundColor: '#020617', justifyContent: 'center' },
+  header: { alignItems: 'center', marginVertical: 30 },
+  avatar: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#1e293b', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#6366f1' },
+  headerTitle: { color: '#fff', fontSize: 24, fontWeight: '900', marginTop: 10 },
+  headerSubtitle: { color: '#94a3b8' },
+  tile: { backgroundColor: '#0f172a', padding: 15, borderRadius: 20, flexDirection: 'row', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#1e293b' },
+  tileIcon: { width: 45, height: 45, borderRadius: 12, backgroundColor: '#1e293b', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  tileLabel: { color: '#6366f1', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  tileValue: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  tileInput: { color: '#fff', fontSize: 16, borderBottomWidth: 1, borderBottomColor: '#6366f1' },
+  btnEdit: { backgroundColor: '#6366f1', padding: 18, borderRadius: 15, alignItems: 'center', marginTop: 20 },
+  btnSave: { backgroundColor: '#10b981', padding: 18, borderRadius: 15, alignItems: 'center', marginTop: 20 },
+  btnSignOut: { padding: 18, alignItems: 'center', marginTop: 10 },
+  btnText: { color: '#fff', fontWeight: '800' }
 });

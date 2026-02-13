@@ -37,12 +37,10 @@ export default function LoginScreen({ navigation }) {
         } else {
           setAuthError(error.message);
         }
-      } else if (signInData.user) {
-        // SUCCESS: Navigate to Profile
-        // If you use an Auth listener in App.js, this navigation might happen automatically.
-        // If not, we manually replace the stack so they can't "Go Back" to login.
-        navigation.replace('Profile'); 
-      }
+      } 
+      // Removed manual navigation.replace('Profile')
+      // App.js listener handles state change automatically
+      
     } catch (err) {
       setAuthError("An unexpected error occurred.");
     } finally {
@@ -103,6 +101,7 @@ export default function LoginScreen({ navigation }) {
                   setAuthError('');
                 }}
                 value={value}
+                autoCapitalize="none"
               />
             )}
           />
@@ -125,7 +124,6 @@ export default function LoginScreen({ navigation }) {
   );
 }
 
-// ORIGINAL STYLING (Unchanged)
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
   card: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, elevation: 10 },
